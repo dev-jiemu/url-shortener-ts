@@ -1,0 +1,8 @@
+{
+    "name": "url-shortener-ts",
+    "private": true,
+    "scripts": {
+        "dev:api": "pnpm --filter api dev",
+        "dev:worker": "pnpm --filter worker dev"
+    }
+}
