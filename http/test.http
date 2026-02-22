@@ -1,0 +1,14 @@
+###
+# curl -X POST http://localhost:8080/api/shorten
+#  -H "Content-Type: application/json"
+#  -d "{\"url\": \"https://www.google.com\"}"
+POST http://localhost:8080/api/shorten
+Content-Type: application/json
+
+{
+    "url": "https://www.google.com"
+}
+
+
+###
+GET http://localhost:8080/HhSoVOC
