@@ -61,9 +61,7 @@ npx prisma generate
 
 ### 다음 작업 순서 👋
 
-1. rate limit (대용량 엣지케이스 체크)
-2. route에 만료 옵션 파라메터 추가하기
-3. Cloudflare Workers — Edge 레이어 연결
+1. Cloudflare Workers — Edge 레이어 연결
 
 
 ---
@@ -83,4 +81,31 @@ worker.on('active', (job) => {})      // job 처리 시작
 worker.on('stalled', (job) => {})     // job이 멈춰버림 (워커가 갑자기 죽었을 때)
 worker.on('progress', (job) => {})    // job 진행률 업데이트
 worker.on('error', (err) => {})       // 워커 자체 에러 (Redis 연결 끊김 등)
+```
+
+
+---
+
+rate limit 적용
+```shell
+# apps/api
+pnpm add @fastify/rate-limit
+```
+
+```typescript
+// Rate Limit 플러그인 등록
+await app.register(rateLimit, {
+    redis: redisConnection,           // Redis store — 멀티 인스턴스 환경에서도 카운트 공유
+    nameSpace: 'rl:',                 // Redis 키 prefix (BullMQ 키와 충돌 방지)
+    max: 60,                          // 전역 기본값: 60회/분
+    timeWindow: '1 minute',
+    keyGenerator: (request) => request.ip, // IP 기반 식별
+    errorResponseBuilder: (_request, context) => ({
+        // 에러 응답 포맷을 다른 에러 응답과 통일
+        message: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
+        retryAfter: Math.ceil(context.ttl / 1000),
+    }),
+    // fail-open: 오류를 던지지 않고 요청을 통과시킴
+    skipOnError: true,
+})
 ```
