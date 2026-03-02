@@ -31,26 +31,56 @@ export class UrlService {
             return { shortCode: existing.shortCode, originalUrl: existing.originalUrl }
         }
 
-        // shortCode 충돌 방지 — 최대 5회 재시도
-        for (let attempt = 0; attempt < 5; attempt++) {
+        // race condition 방지
+        // 기존 흐름 : 5번 정도 DB Search -> 없으면 Insert
+        // for (let attempt = 0; attempt < 5; attempt++) {
+        //     const shortCode = generateShortCode()
+        //     const conflict = await this.urlRepo.findByShortCode(shortCode)
+        //     if (!conflict) {
+        //         const created = await this.urlRepo.create(originalUrl, shortCode, options)
+        //
+        //         // TTL이 있으면 expire-queue에 delayed job 등록
+        //         if (options.expiresAt) {
+        //             const delay = options.expiresAt.getTime() - Date.now()
+        //             if (delay > 0) {
+        //                 await expireQueue.add(
+        //                     'expire',
+        //                     { shortCode },
+        //                     { delay, jobId: `expire:${shortCode}` } // jobId로 중복 방지
+        //                 )
+        //             }
+        //         }
+        //
+        //         return { shortCode: created.shortCode, originalUrl: created.originalUrl }
+        //     }
+        // }
+        // 선 Insert 후 결과보고 판단하기
+        for(let attempt = 0; attempt < 5; attempt++) {
             const shortCode = generateShortCode()
-            const conflict = await this.urlRepo.findByShortCode(shortCode)
-            if (!conflict) {
-                const created = await this.urlRepo.create(originalUrl, shortCode, options)
 
-                // TTL이 있으면 expire-queue에 delayed job 등록
+            try {
+                const created =  await this.urlRepo.create(originalUrl, shortCode, options)
                 if (options.expiresAt) {
                     const delay = options.expiresAt.getTime() - Date.now()
                     if (delay > 0) {
                         await expireQueue.add(
                             'expire',
                             { shortCode },
-                            { delay, jobId: `expire:${shortCode}` } // jobId로 중복 방지
+                            { delay, jobId: `expire:${shortCode}` }
                         )
                     }
                 }
 
-                return { shortCode: created.shortCode, originalUrl: created.originalUrl }
+                return {
+                    shortCode: created.shortCode,
+                    originalUrl: created.originalUrl,
+                }
+            } catch (e: any) {
+                // Prisma unique constraint error
+                if (e.code === 'P2002') {
+                    continue
+                }
+                throw e
             }
         }
 
