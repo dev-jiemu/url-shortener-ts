@@ -1,5 +1,6 @@
 import { UrlRepository } from '../repositories/url.repository'
 import { clickQueue, expireQueue } from '../queues'
+import {UrlExpiredError, UrlNotFoundError} from '../errors'
 
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 const SHORT_CODE_LENGTH = 7
@@ -56,12 +57,16 @@ export class UrlService {
         throw new Error('shortCode 생성 실패 — 재시도 초과')
     }
 
-    async resolve(shortCode: string): Promise<string | null> {
+    // 만료, 존재안하는 url 구분이 필요할듯
+    async resolve(shortCode: string): Promise<string> {
         const url = await this.urlRepo.findByShortCode(shortCode)
-        if (!url) return null
+
+        if (!url) throw new UrlNotFoundError(shortCode)
 
         // 만료 체크 (TTL)
-        if (url.expiresAt && url.expiresAt < new Date()) return null
+        if (url.expiresAt && url.expiresAt < new Date()) {
+            throw new UrlExpiredError(shortCode)
+        }
 
         // 클릭 이벤트를 큐에 비동기로 던짐 — 응답 지연 없음
         await clickQueue.add('click', { shortCode })
