@@ -8,7 +8,15 @@ const urlService = new UrlService(urlRepo)
 
 export const urlRoute = async (app: FastifyInstance) => {
     // POST /api/shorten — long URL -> short URL 변환
-    app.post<{ Body: { url: string } }>('/api/shorten', async (request, reply) => {
+    // 생성 요청은 엄격하게 -> IP당 10회/분
+    app.post<{ Body: { url: string } }>('/api/shorten', {
+        config: {
+            rateLimit: {
+                max: 10,
+                timeWindow: '1 minute',
+            },
+        },
+    }, async (request, reply) => {
         const { url } = request.body
 
         if (!url) {
