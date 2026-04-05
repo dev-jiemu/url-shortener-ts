@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Url {
+  id          Int       @id @default(autoincrement())
+  originalUrl String    @map("original_url")
+  shortCode   String    @unique @map("short_code")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // 만료 정책
+  expiresAt   DateTime? @map("expires_at")   // null = 무기한
+  clickLimit  Int?      @map("click_limit")  // null = 무제한
+  clickCount  Int       @default(0) @map("click_count")
+
+  @@map("urls")
+}
