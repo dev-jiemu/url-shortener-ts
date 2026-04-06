@@ -1,7 +1,4 @@
-###
-# curl -X POST http://localhost:8080/api/shorten
-#  -H "Content-Type: application/json"
-#  -d "{\"url\": \"https://www.google.com\"}"
+### URL 단축 등록
 POST http://localhost:8080/api/shorten
 Content-Type: application/json
 
@@ -10,5 +7,49 @@ Content-Type: application/json
 }
 
 
-###
+### URL 단축 등록 — 만료시간 포함
+POST http://localhost:8080/api/shorten
+Content-Type: application/json
+
+{
+    "url": "https://www.github.com",
+    "expiresAt": "2026-12-31T23:59:59.000Z"
+}
+
+
+### URL 단축 등록 — 클릭 횟수 제한
+POST http://localhost:8080/api/shorten
+Content-Type: application/json
+
+{
+    "url": "https://www.naver.com",
+    "clickLimit": 5
+}
+
+
+### URL 단축 등록 — url 없이 보내기
+POST http://localhost:8080/api/shorten
+Content-Type: application/json
+
+{}
+
+
+
+### 리다이렉트
 GET http://localhost:8080/HhSoVOC
+
+
+### [Worker 전용 resolve
+GET http://localhost:8080/api/resolve/HhSoVOC
+
+
+### Worker 헬스체크
+GET http://localhost:8787/health
+
+
+### Worker 경유 리다이렉트
+GET http://localhost:8787/HhSoVOC
+
+
+### Worker 경유 — shortCode 없이 루트 접근
+GET http://localhost:8787/

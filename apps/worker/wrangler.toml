@@ -1,0 +1,15 @@
+name = "url-shortener-worker"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# 로컬 개발 서버 설정
+[dev]
+port = 8787
+
+# 환경변수 — API 서버 주소
+[vars]
+API_BASE_URL = "http://localhost:8080"
+
+# 프로덕션 환경 (배포할 때 override)
+[env.production.vars]
+API_BASE_URL = "https://localhost:9090" # 변경요망
