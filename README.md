@@ -150,3 +150,29 @@ Url {
 ### BullMQ 큐 구성 할거 ㅇㅂㅇ
 - `click-queue` — 클릭 이벤트 집계, clickLimit 초과 체크
 - `expire-queue` — TTL 기반 delayed job으로 만료 시각에 삭제 실행
+
+
+---
+
+click limit 추가
+- short url 만들었을때 해당 url 로 몇번 접근 가능한지 설정
+- redis 원자적 처리
+```text
+clickLimit 있는 URL 접근 시
+  → Redis 키 없음? → DB clickCount로 초기화 (SET NX)
+  → INCR으로 +1 (원자적)
+  → 결과 > clickLimit? → DECR으로 되돌리고 UrlExpiredError
+  → 통과하면 기존처럼 BullMQ 큐에 click job 추가
+```
+
+### 테스트 코드 실행 명령어 모음 ㅇㅂㅇ
+```shell
+# 동시 단축 요청 (shortCode 중복 방지)
+node apps/api/test/1_shorten_concurrent.test.mjs
+
+# clickLimit 동시 접근
+node apps/api/test/2_click_limit_concurrent.test.mjs
+
+# 부하 테스트 (10초)
+node apps/api/test/3_load_test.mjs
+```
