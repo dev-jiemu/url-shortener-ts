@@ -1,6 +1,7 @@
 import { UrlRepository } from '../repositories/url.repository'
 import { clickQueue, expireQueue } from '../queues'
-import {UrlExpiredError, UrlNotFoundError} from '../errors'
+import { UrlExpiredError, UrlNotFoundError } from '../errors'
+import { redisConnection } from '../lib/redis'
 
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 const SHORT_CODE_LENGTH = 7
@@ -96,6 +97,30 @@ export class UrlService {
         // 만료 체크 (TTL)
         if (url.expiresAt && url.expiresAt < new Date()) {
             throw new UrlExpiredError(shortCode)
+        }
+
+        // clickLimit 원자적 체크 (Redis INCR)
+        if (url.clickLimit !== null) {
+            const key = `click:limit:${shortCode}`
+
+            // 키가 없으면 DB clickCount 기준으로 초기화 후 TTL 설정
+            // SET key value NX : 키가 없을 때만 세팅
+            const initialized = await redisConnection.set(key, url.clickCount, 'NX')
+            if (initialized) {
+                // 키 유효기간 — 24시간 (expiresAt 있으면 그 시점까지만)
+                const ttlSeconds = url.expiresAt
+                    ? Math.ceil((url.expiresAt.getTime() - Date.now()) / 1000)
+                    : 86400
+                if (ttlSeconds > 0) await redisConnection.expire(key, ttlSeconds)
+            }
+
+            // 원자적으로 +1 하고 결과 반환
+            const current = await redisConnection.incr(key)
+            if (current > url.clickLimit) {
+                // 초과분은 되돌림 (카운터가 무한히 증가하는 것 방지)
+                await redisConnection.decr(key)
+                throw new UrlExpiredError(shortCode)
+            }
         }
 
         // 클릭 이벤트를 큐에 비동기로 던짐 — 응답 지연 없음
