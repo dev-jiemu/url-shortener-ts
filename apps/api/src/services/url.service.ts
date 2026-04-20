@@ -77,9 +77,22 @@ export class UrlService {
                     originalUrl: created.originalUrl,
                 }
             } catch (e: any) {
-                // Prisma unique constraint error
                 if (e.code === 'P2002') {
-                    continue
+                    const target = e.meta?.target
+                    const targetStr = Array.isArray(target) ? target.join(',') : String(target ?? '')
+
+                    // shortCode unique 충돌 → 다른 shortCode로 재시도
+                    if (targetStr.includes('short_code')) {
+                        continue
+                    }
+                    // originalUrl unique 충돌 → 동시 요청 중 누군가 먼저 INSERT 성공
+                    // → DB에서 찾아서 반환
+                    if (targetStr.includes('original_url')) {
+                        const existing = await this.urlRepo.findByOriginalUrl(originalUrl)
+                        if (existing) {
+                            return { shortCode: existing.shortCode, originalUrl: existing.originalUrl }
+                        }
+                    }
                 }
                 throw e
             }

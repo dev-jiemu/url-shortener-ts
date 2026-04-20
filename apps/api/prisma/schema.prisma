@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -8,7 +9,7 @@ datasource db {
 
 model Url {
   id          Int       @id @default(autoincrement())
-  originalUrl String    @map("original_url")
+  originalUrl String    @unique @map("original_url")
   shortCode   String    @unique @map("short_code")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")

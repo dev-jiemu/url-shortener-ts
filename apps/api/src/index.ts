@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import Fastify from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 import { urlRoute } from './routes/url.route'
