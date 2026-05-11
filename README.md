@@ -176,3 +176,16 @@ node apps/api/test/2_click_limit_concurrent.test.mjs
 # 부하 테스트 (10초)
 node apps/api/test/3_load_test.mjs
 ```
+
+### memo : prisma migrate 관련 명령어 모음
+```shell
+# Prisma 마이그레이션 실행
+npx prisma migrate dev
+
+# Prisma Studio로 DB 확인 (GUI 툴)
+npx prisma studio
+
+# 초기화 하고 싶으면
+npx prisma migrate reset
+# 아니면 docker-compose down 해도 되긴 함
+```
