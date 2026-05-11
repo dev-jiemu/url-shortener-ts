@@ -67,7 +67,7 @@ export class UrlService {
                         await expireQueue.add(
                             'expire',
                             { shortCode },
-                            { delay, jobId: `expire:${shortCode}` }
+                            { delay, jobId: `expire-${shortCode}` } // BullMQ 가 콜론을 안받는대...ㅇㅂㅇ..
                         )
                     }
                 }
