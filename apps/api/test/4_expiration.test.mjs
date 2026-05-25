@@ -73,7 +73,7 @@ console.log('\n[Expire Worker 처리 대기]')
 console.log('3초 대기 중 (expire worker가 DB에서 삭제할 시간)...')
 await new Promise((resolve) => setTimeout(resolve, 3000))
 
-// 6. 다시 접근 — 여전히 410 또는 404 (worker가 삭제했다면)
+// 다시 접근 해보기 : 여전히 410 또는 404 (worker가 삭제했다면)
 const finalRes = await fetch(`${API}/api/resolve/${shortCode}`, {
     redirect: 'manual',
 })
