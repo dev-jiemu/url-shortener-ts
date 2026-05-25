@@ -25,12 +25,17 @@ const start = async () => {
             keyGenerator: (request) => request.ip, // IP 기반 식별
             errorResponseBuilder: (_request, context) => ({
                 // 에러 응답 포맷을 다른 에러 응답과 통일
+                statusCode: 429,
                 message: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
                 retryAfter: Math.ceil(context.ttl / 1000),
             }),
             // fail-open: 오류를 던지지 않고 요청을 통과시킴
             skipOnError: true,
         })
+
+        // fastify 는 기입 순서대로 등록됨
+        // rateLimit 플러그인 등록 이후에 라우트 등록해야 rate limit config가 적용됨
+        await app.register(urlRoute)
 
         // Worker 시작 (BullMQ Consumer)
         startClickWorker()
@@ -45,7 +50,5 @@ const start = async () => {
         process.exit(1)
     }
 }
-
-app.register(urlRoute)
 
 start()

@@ -3,7 +3,10 @@
     "version": "0.0.1",
     "scripts": {
         "dev": "tsx watch src/index.ts",
-        "build": "tsc"
+        "build": "tsc",
+        "prisma:migrate": "prisma migrate dev",
+        "prisma:generate": "prisma generate",
+        "prisma:studio": "prisma studio"
     },
     "dependencies": {
         "@fastify/rate-limit": "^9.1.0",
