@@ -37,7 +37,15 @@ export const urlRoute = async (app: FastifyInstance) => {
     })
 
     // GET /:shortCode — short URL -> original URL 리다이렉트 (브라우저 직접 접근용)
-    app.get<{ Params: { shortCode: string } }>('/:shortCode', async (request, reply) => {
+    app.get<{ Params: { shortCode: string } }>('/:shortCode', {
+        config: {
+            // 읽기용이니까 좀 느슨하게
+            rateLimit: {
+                max: 1000,
+                timeWindow: '1 minute',
+            },
+        },
+    }, async (request, reply) => {
         const { shortCode } = request.params
 
         try {
@@ -57,7 +65,15 @@ export const urlRoute = async (app: FastifyInstance) => {
     // GET /api/resolve/:shortCode — Cloudflare Worker 전용
     // 302 리다이렉트 대신 originalUrl 을 JSON 으로 반환
     // Worker 가 직접 리다이렉트 응답을 만들기 위해 사용
-    app.get<{ Params: { shortCode: string } }>('/api/resolve/:shortCode', async (request, reply) => {
+    app.get<{ Params: { shortCode: string } }>('/api/resolve/:shortCode', {
+        config: {
+            // 읽기용이니까 좀 느슨하게
+            rateLimit: {
+                max: 1000,
+                timeWindow: '1 minute',
+            },
+        },
+    }, async (request, reply) => {
         const { shortCode } = request.params
 
         try {
