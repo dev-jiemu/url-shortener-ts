@@ -177,6 +177,44 @@ node apps/api/test/2_click_limit_concurrent.test.mjs
 node apps/api/test/3_load_test.mjs
 ```
 
+---
+
+## 🚧 앞으로 해야할 일 (Known Issues & TODOs)
+
+코드 분석 중 발견한 리스크와 미완성 항목들
+
+### [ ] 헬스체크 엔드포인트 추가
+- 현재 API 서버에 `/health` 엔드포인트가 없음
+- 로드밸런서나 컨테이너 오케스트레이터(K8s, ECS 등) 연동 시 필요
+- `apps/api/src/routes/url.route.ts` 에 추가 필요
+
+### [ ] CI/CD 파이프라인 구성
+- `.github/workflows/` 등 자동화 파이프라인이 없어 현재 수동 배포 구조
+- 빌드 → 테스트 → 배포 자동화 필요
+
+### [ ] wrangler.toml 프로덕션 API_BASE_URL 설정
+- `apps/worker/wrangler.toml` L15의 `API_BASE_URL`이 `https://localhost:9090` placeholder 상태
+- 실제 배포 전 반드시 변경 필요
+
+### [ ] Redis flush 시 Click Limit 카운터 불일치 해결
+- `resolve()` 에서 Redis `INCR`로 clickLimit을 체크하고 Worker가 DB `clickCount`를 나중에 갱신하는 구조
+- Redis가 초기화되면 DB `clickCount` 기준으로 리셋되는데, 이미 한도에 가까운 경우 초과 접근이 허용될 수 있음
+- 근거: `apps/api/src/services/url.service.ts:119-128`
+
+### [ ] click-worker 실패 시 DB 레코드 잔존 처리
+- Worker가 재시도 초과로 최종 실패하면 DB에서 만료된 URL이 삭제되지 않고 남음
+- Dead Letter Queue 또는 별도 정리 배치 고려 필요
+
+### [ ] shortCode 생성 전략 개선 검토
+- 현재 7자리 Base62 순수 난수 생성 + 최대 5회 재시도
+- 데이터가 수억 건으로 증가하면 충돌 확률 증가 → 카운터 기반 생성 전략 검토 필요
+
+### [ ] packages/types 패키지 활용 or 제거
+- `packages/types/` 가 존재하나 소스 파일이 없는 상태
+- 공유 타입을 여기에 모을 계획이라면 `UrlService.ShortenOptions` 등 이동, 아니면 디렉터리 삭제
+
+---
+
 ### memo : prisma migrate 관련 명령어 모음
 ```shell
 # Prisma 마이그레이션 실행
