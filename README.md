@@ -179,6 +179,73 @@ node apps/api/test/3_load_test.mjs
 
 ---
 
+## 🌊 이벤트 드라이븐 확장 로드맵 (Event-Driven Roadmap)
+
+> 하려는거 : 지금의 **작업 큐(BullMQ)** 패턴을 넘어서, 하나의 이벤트를 여러 컨슈머가
+> 각자 소비하는 **fan-out** 과 이벤트를 로그로 쌓아 재생하는 **이벤트 소싱** 구현해보기 ㅇㅂㅇ
+
+### 현재 구조 (As-Is)
+
+```
+resolve()
+  → clickQueue.add('click', { shortCode })   // 단일 job
+      → click.worker (단일 컨슈머)
+          → DB clickCount +1
+          → clickLimit 초과 시 삭제
+```
+
+- `click job` 하나를 워커 하나가 처리하는 **competing-consumers(작업 큐)** 모델
+- 클릭에 반응하는 동작을 추가하려면 worker 로직을 직접 수정해야 함 → 결합도 높음
+
+### 목표 구조 (To-Be) — Redis Streams 기반 fan-out
+
+```
+resolve()
+  → XADD url:clicked * shortCode ...   // 이벤트 발행 (append-only 로그)
+      │
+      ├── 집계 컨슈머   → DB clickCount 갱신 + clickLimit 체크   (기존 click.worker 로직 이전)
+      ├── 통계 컨슈머   → 시간대별 / 일자별 클릭 수 집계         (신규)
+      └── 분석 컨슈머   → referer · 지역(geo) 분포 집계          (신규)
+
+  ※ 각 컨슈머는 독립된 Consumer Group 으로 동작 → 하나가 죽어도 나머지는 정상
+  ※ Stream 은 이벤트가 로그로 남으므로 처음부터 replay 가능
+```
+
+> 💡 **BullMQ 는 유지** — `expire-queue` 의 delayed job(만료 예약)은 Streams 가 기본 지원하지
+> 않는 기능이라 그대로 둠. "지연 실행은 BullMQ, 이벤트 fan-out 은 Streams" 로 역할 분담.
+
+### 단계별 계획 (Phases)
+
+#### Phase 0 — 이벤트 스키마 정의
+- [ ] `packages/types` 에 `UrlClickedEvent` 타입 정의 (마침 비어있는 패키지 활용)
+- [ ] 이벤트 필드 확정 : `shortCode`, `clickedAt`, `referer?`, `ip?`, `country?`
+- 학습 포인트 : 이벤트는 "무슨 일이 일어났는가(과거형)" 를 표현 → `url.clicked`
+
+#### Phase 1 — Redis Streams 도입 & fan-out 전환
+- [ ] `resolve()` 의 `clickQueue.add('click')` → `XADD url:clicked` 로 교체
+- [ ] 기존 `click.worker` 로직을 **집계 컨슈머**로 이전 (Consumer Group `agg`)
+- [ ] **통계 컨슈머** 신규 추가 (Consumer Group `stats`) — 같은 이벤트를 독립 소비
+- [ ] 컨슈머 그룹별 `XREADGROUP` + `XACK` 처리, 미처리 메시지 `XPENDING` 확인
+- 학습 포인트 : 같은 이벤트 → N개 컨슈머가 **각자** 소비하는 fan-out 감각
+
+#### Phase 2 — 이벤트 소싱 (clickCount 불일치 정공법 해결)
+- [ ] 클릭 이벤트를 append-only 로그로 보존 (Stream 자체 or 별도 `click_events` 테이블)
+- [ ] clickCount 를 "현재 상태 컬럼" 이 아니라 **이벤트 재생(replay) 결과** 로 계산 가능하게
+- [ ] 아래 TODO 의 "Redis flush 시 clickCount 불일치" 를 이 구조로 해결
+- 학습 포인트 : 상태(state)를 저장하지 않고, 상태를 만든 사건(event)을 저장한다
+
+#### Phase 3 — 실패 처리 & DLQ
+- [ ] 컨슈머 최종 실패 메시지를 `url:clicked:dead` 스트림으로 이동 (Dead Letter)
+- [ ] 아래 TODO 의 "click-worker 실패 시 DB 레코드 잔존" 과 연계
+- 학습 포인트 : 분산 시스템에서 "실패한 이벤트를 어디에 모아 어떻게 재처리하나"
+
+#### Phase 4 — (옵션) 서비스 분리 / 브로커 교체 검토
+- [ ] 통계·분석 컨슈머를 별도 프로세스(서비스)로 분리
+- [ ] 트래픽·보존(retention) 요구가 커지면 Redis Streams → Kafka 교체 검토
+- 학습 포인트 : MSA 서비스 간 이벤트 통신, 로그 보존/재생의 차이
+
+---
+
 ## 🚧 앞으로 해야할 일 (Known Issues & TODOs)
 
 코드 분석 중 발견한 리스크와 미완성 항목들
