@@ -49,7 +49,10 @@ export const urlRoute = async (app: FastifyInstance) => {
         const { shortCode } = request.params
 
         try {
-            const originalUrl = await urlService.resolve(shortCode)
+            const originalUrl = await urlService.resolve(shortCode, {
+                referer: request.headers.referer,
+                ip: request.ip,
+            })
             return reply.redirect(originalUrl, 302)
         } catch (e) {
             if (e instanceof UrlExpiredError) {
@@ -77,7 +80,10 @@ export const urlRoute = async (app: FastifyInstance) => {
         const { shortCode } = request.params
 
         try {
-            const originalUrl = await urlService.resolve(shortCode)
+            const originalUrl = await urlService.resolve(shortCode, {
+                referer: request.headers.referer,
+                ip: request.ip,
+            })
             return reply.status(200).send({ originalUrl })
         } catch (e) {
             if (e instanceof UrlExpiredError) {

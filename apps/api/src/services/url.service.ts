@@ -1,7 +1,12 @@
+import geoip from 'geoip-lite'
+import { UrlClickedEvent } from '@url-shortener/types'
 import { UrlRepository } from '../repositories/url.repository'
-import { clickQueue, expireQueue } from '../queues'
+import { expireQueue } from '../queues'
 import { UrlExpiredError, UrlNotFoundError } from '../errors'
 import { redisConnection } from '../lib/redis'
+
+// Redis Streams 키 — 클릭 이벤트 append-only 로그 (Phase 1)
+const URL_CLICKED_STREAM = 'url:clicked'
 
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 const SHORT_CODE_LENGTH = 7
@@ -102,7 +107,7 @@ export class UrlService {
     }
 
     // 만료, 존재안하는 url 구분이 필요할듯
-    async resolve(shortCode: string): Promise<string> {
+    async resolve(shortCode: string, meta: { referer?: string; ip?: string } = {}): Promise<string> {
         const url = await this.urlRepo.findByShortCode(shortCode)
 
         if (!url) throw new UrlNotFoundError(shortCode)
@@ -136,8 +141,19 @@ export class UrlService {
             }
         }
 
-        // 클릭 이벤트를 큐에 비동기로 던짐 — 응답 지연 없음
-        await clickQueue.add('click', { shortCode })
+        // 클릭 이벤트를 Redis Streams로 발행 — 응답 지연 없음, append-only 로그라 추후 replay 가능
+        const country = meta.ip ? geoip.lookup(meta.ip)?.country : undefined
+
+        const event: UrlClickedEvent = {
+            shortCode,
+            clickedAt: new Date().toISOString(),
+            ...(meta.referer ? { referer: meta.referer } : {}),
+            ...(meta.ip ? { ip: meta.ip } : {}),
+            ...(country ? { country } : {}),
+        }
+
+        const fields = Object.entries(event).flatMap(([key, value]) => [key, String(value)])
+        await redisConnection.xadd(URL_CLICKED_STREAM, '*', ...fields)
 
         return url.originalUrl
     }

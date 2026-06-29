@@ -2,7 +2,6 @@ import 'dotenv/config'
 import Fastify from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 import { urlRoute } from './routes/url.route'
-import { startClickWorker } from './workers/click.worker'
 import { startExpireWorker } from './workers/expire.worker'
 import { redisConnection } from './lib/redis'
 
@@ -38,7 +37,8 @@ const start = async () => {
         await app.register(urlRoute)
 
         // Worker 시작 (BullMQ Consumer)
-        startClickWorker()
+        // click.worker는 Phase 1에서 Redis Streams 컨슈머로 대체 예정 — 일단 미기동 상태
+        // startClickWorker()
         startExpireWorker()
 
         await app.listen({
