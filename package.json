@@ -4,5 +4,10 @@
     "scripts": {
         "dev:api": "pnpm --filter api dev",
         "dev:worker": "pnpm --filter worker dev"
+    },
+    "pnpm": {
+        "overrides": {
+            "ioredis": "^5.11.1"
+        }
     }
 }
