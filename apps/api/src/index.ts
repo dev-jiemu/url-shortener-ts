@@ -3,6 +3,8 @@ import Fastify from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 import { urlRoute } from './routes/url.route'
 import { startExpireWorker } from './workers/expire.worker'
+import { startAggConsumer } from './consumers/agg.consumer'
+import { startStatsConsumer } from './consumers/stats.consumer'
 import { redisConnection } from './lib/redis'
 
 const app = Fastify({
@@ -36,10 +38,10 @@ const start = async () => {
         // rateLimit 플러그인 등록 이후에 라우트 등록해야 rate limit config가 적용됨
         await app.register(urlRoute)
 
-        // Worker 시작 (BullMQ Consumer)
-        // click.worker는 Phase 1에서 Redis Streams 컨슈머로 대체 예정 — 일단 미기동 상태
-        // startClickWorker()
-        startExpireWorker()
+        // Worker / Consumer 시작
+        startExpireWorker()          // BullMQ — TTL 만료 처리
+        await startAggConsumer()     // Redis Streams — 클릭 집계 + clickLimit 체크
+        await startStatsConsumer()   // Redis Streams — 통계 (country별 클릭 수 등, TODO)
 
         await app.listen({
             port: Number(process.env.PORT ?? 8080),

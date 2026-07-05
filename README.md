@@ -179,6 +179,81 @@ node apps/api/test/3_load_test.mjs
 
 ---
 
+## 🌊 Redis Streams — Consumer Group 구독 정리
+
+> Redis Streams 처음 써봐서 정리함 ㅇㅂㅇ (feat. Claude)
+
+### Redis Streams 가 BullMQ 와 다른 핵심 차이
+
+| | BullMQ (작업 큐) | Redis Streams (이벤트 로그) |
+|---|---|---|
+| 소비 모델 | competing-consumers (한 job을 워커 중 하나만 처리) | fan-out (같은 이벤트를 Consumer Group별로 각자 처리) |
+| 메시지 보존 | 처리 완료 후 삭제 | append-only 로그로 영구 보존 (replay 가능) |
+| 용도 | "이 작업을 누군가 처리해줘" | "이 일이 일어났다" 를 여러 곳에 알림 |
+
+### 핵심 명령어 흐름
+
+```
+// 1. 이벤트 발행 (url.service.ts)
+XADD url:clicked * shortCode abc123 clickedAt 2025-01-01T00:00:00Z ip 1.2.3.4 country KR
+      ↑ 스트림명  ↑ 자동 ID  ↑ 필드들 (key value 쌍)
+
+// 2. Consumer Group 생성 (컨슈머 시작 시 1회)
+XGROUP CREATE url:clicked agg $ MKSTREAM
+                           ↑   ↑
+                        그룹명  $: 이 시점 이후 메시지만 구독 (0이면 처음부터)
+
+// 3. 메시지 읽기 (폴링 루프)
+XREADGROUP GROUP agg agg-1 COUNT 10 BLOCK 5000 STREAMS url:clicked >
+                 ↑    ↑                          ↑               ↑
+              그룹명  컨슈머명            스트림명   >: 아직 안 배달된 새 메시지만
+
+// 4. 처리 완료 확인 (XACK 안 하면 XPENDING에 남아 재처리 대상이 됨)
+XACK url:clicked agg <message-id>
+```
+
+### Consumer Group 이 fan-out 되는 원리
+
+```
+XADD url:clicked * shortCode abc123   ← 이벤트 1개 발행
+
+   스트림: url:clicked
+   ├── agg   그룹의 last-delivered-id  →  agg-1 컨슈머가 읽어감 → XACK
+   └── stats 그룹의 last-delivered-id  →  stats-1 컨슈머가 읽어감 → XACK
+
+   ✅ 같은 메시지를 두 그룹이 각자 독립적으로 소비
+   ✅ agg가 느려도 stats에는 영향 없음
+```
+
+### XPENDING — 실패 메시지 추적
+
+```
+XPENDING url:clicked agg - + 10
+                         ↑ ↑
+                       최소ID 최대ID (범위)
+
+// XACK 없이 일정 시간 지난 메시지를 다시 가져와 재처리 (XCLAIM)
+XCLAIM url:clicked agg agg-1 60000 <message-id>
+                              ↑
+                        60초 이상 미처리 메시지를 agg-1 이 가져옴
+```
+
+> 💡 이번 구현에서는 처리 실패 시 그냥 로그만 찍고 XPENDING에 남기는 방식으로 처리함
+> → Phase 3 (DLQ) 에서 XCLAIM + Dead Letter Stream 으로 정공법 처리 예정
+
+### 파일 위치
+
+```
+apps/api/src/
+├── consumers/
+│   ├── agg.consumer.ts    # clickCount 집계 + clickLimit 초과 삭제 (Consumer Group: agg)
+│   └── stats.consumer.ts  # 통계 로깅, 추후 집계 로직 추가 예정 (Consumer Group: stats)
+└── services/
+    └── url.service.ts     # resolve() 에서 XADD 로 이벤트 발행
+```
+
+---
+
 ## 🌊 이벤트 드라이븐 확장 로드맵 (Event-Driven Roadmap)
 
 > 하려는거 : 지금의 **작업 큐(BullMQ)** 패턴을 넘어서, 하나의 이벤트를 여러 컨슈머가
@@ -216,16 +291,16 @@ resolve()
 
 ### 단계별 계획 (Phases)
 
-#### Phase 0 — 이벤트 스키마 정의
-- [ ] `packages/types` 에 `UrlClickedEvent` 타입 정의 (마침 비어있는 패키지 활용)
-- [ ] 이벤트 필드 확정 : `shortCode`, `clickedAt`, `referer?`, `ip?`, `country?`
+#### Phase 0 — 이벤트 스키마 정의 ✅
+- [x] `packages/types` 에 `UrlClickedEvent` 타입 정의 (마침 비어있는 패키지 활용)
+- [x] 이벤트 필드 확정 : `shortCode`, `clickedAt`, `referer?`, `ip?`, `country?`
 - 학습 포인트 : 이벤트는 "무슨 일이 일어났는가(과거형)" 를 표현 → `url.clicked`
 
-#### Phase 1 — Redis Streams 도입 & fan-out 전환
-- [ ] `resolve()` 의 `clickQueue.add('click')` → `XADD url:clicked` 로 교체
-- [ ] 기존 `click.worker` 로직을 **집계 컨슈머**로 이전 (Consumer Group `agg`)
-- [ ] **통계 컨슈머** 신규 추가 (Consumer Group `stats`) — 같은 이벤트를 독립 소비
-- [ ] 컨슈머 그룹별 `XREADGROUP` + `XACK` 처리, 미처리 메시지 `XPENDING` 확인
+#### Phase 1 — Redis Streams 도입 & fan-out 전환 ✅
+- [x] `resolve()` 의 `clickQueue.add('click')` → `XADD url:clicked` 로 교체
+- [x] 기존 `click.worker` 로직을 **집계 컨슈머**로 이전 (Consumer Group `agg`)
+- [x] **통계 컨슈머** 신규 추가 (Consumer Group `stats`) — 같은 이벤트를 독립 소비
+- [x] 컨슈머 그룹별 `XREADGROUP` + `XACK` 처리, 미처리 메시지 `XPENDING` 확인
 - 학습 포인트 : 같은 이벤트 → N개 컨슈머가 **각자** 소비하는 fan-out 감각
 
 #### Phase 2 — 이벤트 소싱 (clickCount 불일치 정공법 해결)
@@ -276,9 +351,9 @@ resolve()
 - 현재 7자리 Base62 순수 난수 생성 + 최대 5회 재시도
 - 데이터가 수억 건으로 증가하면 충돌 확률 증가 → 카운터 기반 생성 전략 검토 필요
 
-### [ ] packages/types 패키지 활용 or 제거
-- `packages/types/` 가 존재하나 소스 파일이 없는 상태
-- 공유 타입을 여기에 모을 계획이라면 `UrlService.ShortenOptions` 등 이동, 아니면 디렉터리 삭제
+### [x] packages/types 패키지 활용 ✅
+- `packages/types/src/index.ts` 에 `UrlClickedEvent` 타입 정의 완료
+- Phase 1에서 `apps/api` 가 `@url-shortener/types` 로 참조하여 사용 중임
 
 ---
 
